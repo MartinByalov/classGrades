@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="bg">
+
+<head>
+   
+  <meta charset="UTF-8" />  
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Училищен дневник - Импорт от Excel</title>
+    <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 30px;
+      background: #f9f9f9;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin-bottom: 10px;
+      color: #2c3e50;
+    }
+
+    h1 {
+      color: #3498db;
+      border-bottom: 2px solid #3498db;
+      padding-bottom: 10px;
+    }
+
+    label,
+    select,
+    button {
+      display: block;
+      margin: 10px 0 15px;
+    }
+
+    select,
+    input[type="file"] {
+      padding: 8px;
+      font-size: 1rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      width: 100%;
+      max-width: 400px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+      background: white;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+
+    th,
+    td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    th {
+      background-color: #3498db;
+      color: white;
+      font-weight: bold;
+    }
+
+    td.subject {
+      text-align: left;
+      font-weight: 600;
+      background-color: #f8f9fa;
+    }
+
+    tr:nth-child(even) {
+      background-color: #f2f2f2;
+    }
+
+    tr:hover {
+      background-color: #e9f7fe;
+    }
+
+    #success {
+      margin-top: 15px;
+      font-weight: bold;
+      padding: 10px;
+      background-color: #d4edda;
+      color: #155724;
+      border-radius: 4px;
+      display: inline-block;
+    }
+
+    #fileLabel {
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+
+    .container {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Стилове за оцветеното квадратче вътре в клетката */
+    td.grade-cell {
+      position: relative;
+      padding: 0;
+      height: 40px;
+    }
+
+    td.grade-cell::before {
+      content: attr(data-grade);
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 30px;
+      height: 30px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      color: white;
+      font-size: 0.9em;
+    }
+
+    td.grade-cell.grade-2::before {
+      background-color: #ff0000;
+      border: 1px solid #ff0000;
+    }
+
+    td.grade-cell.grade-3::before {
+      background-color: #ff8000;
+      border: 1px solid #ff8000;
+    }
+
+    td.grade-cell.grade-4::before {
+      background-color: #f0c800;
+      border: 1px solid #f0c800;
+    }
+
+    td.grade-cell.grade-5::before {
+      background-color: #a3c20a;
+      border: 1px solid #a3c20a;
+    }
+
+    td.grade-cell.grade-6::before {
+      background-color: #339933;
+      border: 1px solid #339933;
+    }
+
+    /* Стил за клетките без оценки, за да имат рамка */
+    td.no-grade {
+      border: 1px solid #ddd;
+    }
+  </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Училищен дневник - Импорт от Excel</h1>
+
+        <label id="fileLabel" for="inputFile">Избери Excel файл с оценки (.xlsx):</label>
+        <input type="file" id="inputFile" accept=".xlsx" />
+
+        <label for="studentSelect">Избери ученик:</label>
+        <select id="studentSelect" disabled>
+            <option value="">-- първо зареди файл --</option>
+          </select>
+
+        <label for="classSelect">Избери клас:</label>
+        <select id="classSelect" disabled>
+            <option value="">-- първо избери ученик --</option>
+          </select>
+
+        <div id="gradesContainer"></div>
+
+        <div id="success"></div>
+      </div>
+
+   
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+   
+  <script>
+    let data = {};
+    const inputFile = document.getElementById('inputFile');
+    const studentSelect = document.getElementById('studentSelect');
+    const classSelect = document.getElementById('classSelect');
+    const gradesContainer = document.getElementById('gradesContainer');
+    const successDiv = document.getElementById('success');
+
+    inputFile.addEventListener('change', handleFile, false);
+    studentSelect.addEventListener('change', onStudentChange);
+    classSelect.addEventListener('change', onClassChange);
+
+    // Дефинираме ключови текстове за разпознаване на секции
+    const CLASS_START_MARKER = "учебен предмет"; // Клетка A, която съдържа "учебен предмет"
+    const CLASS_END_MARKERS = ["общ брой часове", "небен", "нво"];
+
+    function handleFile(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function (evt) {
+        try {
+          const dataRaw = evt.target.result;
+          const workbook = XLSX.read(dataRaw, { type: 'binary', raw: true });
+          data = {};
+
+          workbook.SheetNames.forEach(sheetName => {
+            const ws = workbook.Sheets[sheetName];
+            // Извличаме всички данни, без да филтрираме предварително
+            const json = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" });
+            parseStudentSheet(sheetName, json);
+          });
+
+          populateStudentSelect();
+          gradesContainer.innerHTML = "";
+          successDiv.textContent = "";
+          classSelect.innerHTML = '<option value="">-- първо избери ученик --</option>';
+          classSelect.disabled = true;
+        } catch (error) {
+          console.error("Грешка при обработка на файла:", error);
+          alert("Възникна грешка при обработка на файла. Моля, проверете формата.");
+        }
+      };
+      reader.readAsBinaryString(file);
+    }
+
+    function parseStudentSheet(studentName, sheetData) {
+      data[studentName] = { classes: {} };
+      let currentClassSubjects = null; // Обект, който ще държи предметите за текущия клас
+      let currentClassName = null; // Името на текущия клас (напр. "8 клас")
+
+      for (let i = 0; i < sheetData.length; i++) {
+        const row = sheetData[i];
+        if (!row || row.length === 0 || !row[0]) {
+          // Ако редът е празен, и сме в режим на събиране, може да е край на секцията
+          if (currentClassSubjects !== null && currentClassSubjects.length > 0) {
+            // Ако вече събираме и срещнем празен ред, запазваме събраното
+            data[studentName].classes[currentClassName] = currentClassSubjects;
+            console.log(`Запазени данни за ${currentClassName} след празен ред.`);
+          }
+          currentClassSubjects = null; // Спираме събирането
+          currentClassName = null;
+          continue; // Продължаваме към следващия ред, може да започне нов клас
+        }
+
+        const firstCell = String(row[0]).trim().toLowerCase();
+
+        // Проверка за начало на нов клас
+        // Разпознаваме "8 клас", "9 клас", "10 клас" от клетка А
+        if (firstCell.includes("8 клас") || firstCell.includes("9 клас") || firstCell.includes("10 клас")) {
+          // Ако вече сме събирали за предишен клас, запазваме данните
+          if (currentClassSubjects !== null && currentClassSubjects.length > 0) {
+            data[studentName].classes[currentClassName] = currentClassSubjects;
+            console.log(`Запазени данни за ${currentClassName} преди нов клас.`);
+          }
+          // Започваме нов клас
+          currentClassName = firstCell.includes("8 клас") ? "8 клас" :
+            firstCell.includes("9 клас") ? "9 клас" : "10 клас";
+          currentClassSubjects = [];
+          console.log(`Намерено начало на ${currentClassName} на ред ${i}.`);
+          continue; // Преминаваме към следващия ред (който трябва да е заглавния ред на предметите или първия предмет)
+        }
+
+        // Проверка за край на текущата секция с оценки (ако събираме данни)
+        let isEndMarker = CLASS_END_MARKERS.some(marker => firstCell.includes(marker));
+        if (isEndMarker) {
+          if (currentClassSubjects !== null && currentClassSubjects.length > 0) {
+            data[studentName].classes[currentClassName] = currentClassSubjects;
+            console.log(`Запазени данни за ${currentClassName} след маркер за край: "${firstCell}".`);
+          }
+          currentClassSubjects = null; // Спираме събирането
+          currentClassName = null;
+          continue;
+        }
+
+        // Ако събираме данни за клас и не е маркер за начало/край или заглавен ред на предмет
+        if (currentClassSubjects !== null && firstCell !== CLASS_START_MARKER) {
+          const subject = String(row[0]).trim();
+          const term1 = extractGrade(row[1]);
+          const term2 = extractGrade(row[2]);
+          const year = extractGrade(row[3]);
+
+          if (subject) { // Уверете се, че има предмет
+            currentClassSubjects.push({
+              subject,
+              term1,
+              term2,
+              year
+            });
+            console.log(`Добавен предмет "${subject}" за ${currentClassName}.`);
+          }
+        }
+      }
+
+      // След края на цикъла, запазваме всички останали събрани данни
+      if (currentClassSubjects !== null && currentClassSubjects.length > 0) {
+        data[studentName].classes[currentClassName] = currentClassSubjects;
+        console.log(`Запазени останали данни за ${currentClassName} след края на файла.`);
+      }
+
+      // Допълнителна проверка, за да се уверим, че всички класове са намерени
+      // (този блок може да бъде премахнат, ако не е необходим за валидация)
+      const expectedClasses = ["8 клас", "9 клас", "10 клас"];
+      expectedClasses.forEach(cName => {
+        if (!data[studentName].classes[cName] || data[studentName].classes[cName].length === 0) {
+          console.warn(`Не са намерени оценки за ${cName} в листа на ${studentName}`);
+        } else {
+          console.log(`Оценки за ${cName} за ${studentName} успешно заредени.`);
+        }
+      });
+    }
+
+    function extractGrade(gradeValue) {
+      if (gradeValue === null || gradeValue === undefined || gradeValue === "") return null;
+
+      const strVal = String(gradeValue).trim();
+      if (!strVal) return null;
+
+      // Ако оценката е чисто число
+      const numVal = parseInt(strVal, 10);
+      if (!isNaN(numVal) && numVal >= 2 && numVal <= 6) return numVal;
+
+      // Ако е във формат "Добър 4" или подобен
+      const numMatch = strVal.match(/(\d)/); // Взима първата цифра
+      if (numMatch) {
+        const num = parseInt(numMatch[1], 10);
+        if (num >= 2 && num <= 6) return num;
+      }
+
+      // Текстови оценки
+      if (strVal.includes("Отличен")) return 6;
+      if (strVal.includes("Много добър")) return 5;
+      if (strVal.includes("Добър")) return 4;
+      if (strVal.includes("Среден")) return 3;
+      if (strVal.includes("Слаб")) return 2;
+
+      return null;
+    }
+
+    function populateStudentSelect() {
+      studentSelect.innerHTML = '<option value="">-- изберете ученик --</option>';
+      Object.keys(data).forEach(student => {
+        const opt = document.createElement('option');
+        opt.value = student;
+        opt.textContent = student;
+        studentSelect.appendChild(opt);
+      });
+      studentSelect.disabled = false;
+    }
+
+    function onStudentChange() {
+      const student = studentSelect.value;
+      gradesContainer.innerHTML = "";
+      successDiv.textContent = "";
+
+      if (!student) {
+        classSelect.innerHTML = '<option value="">-- първо избери ученик --</option>';
+        classSelect.disabled = true;
+        return;
+      }
+
+      classSelect.innerHTML = '<option value="">-- изберете клас --</option>';
+      // Използваме Object.keys(data[student].classes) за да вземем само наличните класове за този ученик
+      const availableClasses = Object.keys(data[student].classes).sort((a, b) => {
+        // Сортиране на класовете, за да се показват в логичен ред
+        const classOrder = { "8 клас": 1, "9 клас": 2, "10 клас": 3 };
+        return classOrder[a] - classOrder[b];
+      });
+
+      availableClasses.forEach(className => {
+        const opt = document.createElement('option');
+        opt.value = className;
+        opt.textContent = className;
+        classSelect.appendChild(opt);
+      });
+      classSelect.disabled = false;
+    }
+
+    function onClassChange() {
+      const student = studentSelect.value;
+      const className = classSelect.value;
+
+      gradesContainer.innerHTML = "";
+      successDiv.textContent = "";
+
+      if (!student || !className) return;
+
+      const subjects = data[student]?.classes[className];
+      if (!subjects || subjects.length === 0) {
+        gradesContainer.innerHTML = "<p>Няма налични оценки за избрания клас.</p>";
+        return;
+      }
+
+      let html = `<h2>${student}</h2><h3>${className} - Оценки</h3>`;
+      html += '<table><thead><tr><th>Предмет</th><th>I срок</th><th>II срок</th><th>Годишна оценка</th></tr></thead><tbody>';
+
+      let sumGrades = 0;
+      let countGrades = 0;
+
+      subjects.forEach(subject => {
+        // Определяме класове за оценките и data-grade атрибут
+        const term1Display = subject.term1 !== null ? subject.term1 : '-';
+        const term1Class = subject.term1 !== null ? `grade-cell grade-${subject.term1}` : 'no-grade';
+
+        const term2Display = subject.term2 !== null ? subject.term2 : '-';
+        const term2Class = subject.term2 !== null ? `grade-cell grade-${subject.term2}` : 'no-grade';
+
+        const yearDisplay = subject.year !== null ? subject.year : '-';
+        const yearClass = subject.year !== null ? `grade-cell grade-${subject.year}` : 'no-grade';
+
+
+        html += `<tr>
+          <td class="subject">${subject.subject}</td>
+          <td class="${term1Class}" data-grade="${term1Display}">${term1Display === '-' ? '-' : ''}</td>
+          <td class="${term2Class}" data-grade="${term2Display}">${term2Display === '-' ? '-' : ''}</td>
+          <td class="${yearClass}" data-grade="${yearDisplay}">${yearDisplay === '-' ? '-' : ''}</td>
+        </tr>`;
+
+        if (subject.year !== null) {
+          sumGrades += subject.year;
+          countGrades++;
+        }
+      });
+
+      html += '</tbody></table>';
+      gradesContainer.innerHTML = html;
+
+      if (countGrades > 0) {
+        const average = (sumGrades / countGrades).toFixed(2);
+        successDiv.textContent = `Среден успех за ${className}: ${average}`;
+      } else {
+        successDiv.textContent = "Няма годишни оценки за изчисляване на успех.";
+      }
+    }
+  </script>
+</body>
+
+</html>
