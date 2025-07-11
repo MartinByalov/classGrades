@@ -153,6 +153,36 @@
         td.no-grade {
             border: 1px solid #ddd;
         }
+
+        .export-buttons-container {
+            margin-top: 30px;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+            display: flex;
+            gap: 15px; /* Разстояние между бутоните */
+            flex-wrap: wrap; /* Позволява преминаване на нов ред при по-малък екран */
+        }
+
+        #exportSelectedStudentButton,
+        #exportAllStudentsButton {
+            background-color: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        #exportSelectedStudentButton:hover,
+        #exportAllStudentsButton:hover {
+            background-color: #218838;
+        }
+
+        #exportAllStudentsButton:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 
@@ -181,6 +211,12 @@
         <div id="gradesContainer"></div>
 
         <div id="success"></div>
+
+        <div id="finalGradesDisplay"></div>
+
+        <div class="export-buttons-container">
+            <button id="exportAllStudentsButton" disabled>Експорт на всички окончателни оценки в Excel</button>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -188,6 +224,7 @@
     <script>
         let data = {};
         let currentSpecialtySubjects = []; // Масив, който ще държи активните предмети за избраната специалност
+        let currentStudentName = null; // Променлива за съхраняване на текущия ученик
 
         const inputFile = document.getElementById('inputFile');
         const specialtySelect = document.getElementById('specialtySelect');
@@ -195,141 +232,82 @@
         const classSelect = document.getElementById('classSelect');
         const gradesContainer = document.getElementById('gradesContainer');
         const successDiv = document.getElementById('success');
+        const finalGradesDisplayDiv = document.getElementById('finalGradesDisplay'); // Взимаме референция към div-а
+        const exportAllStudentsButton = document.getElementById('exportAllStudentsButton');
 
         inputFile.addEventListener('change', handleFile, false);
         specialtySelect.addEventListener('change', onSpecialtyChange);
         studentSelect.addEventListener('change', onStudentChange);
         classSelect.addEventListener('change', onClassChange);
+        exportAllStudentsButton.addEventListener('click', exportAllFinalGradesToExcel);
 
         // Дефинираме ключови текстове за разпознаване на секции
         const CLASS_START_MARKER = "учебен предмет"; // Клетка A, която съдържа "учебен предмет"
         const CLASS_END_MARKERS = ["общ брой часове", "небен", "нво"];
 
         // Дефиниции на специалностите
-       const SPECIALTIES = {
-        "10.В - Промишлен дизайн": [
-            { original: "Български език и литература", normalized: "български език и литература" },
-            { original: "Английски език", normalized: "английски език" },
-            { original: "Руски език", normalized: "руски език" },
-            { original: "Математика", normalized: "математика" },
-            { original: "Информационни технологии", normalized: "информационни технологии" },
-            { original: "История и цивилизации", normalized: "история и цивилизации" },
-            { original: "География и икономика", normalized: "география и икономика" },
-            { original: "Философия", normalized: "философия" },
-            { original: "Биология и здравно образование", normalized: "биология и здравно образование" },
-            { original: "Физика и астрономия", normalized: "физика и астрономия" },
-            { original: "Химия и опазване на околната среда", normalized: "химия и опазване на околната среда" },
-            { original: "Изобразително изкуство", normalized: "изобразително изкуство" },
-            { original: "Физическо възпитание и спорт", normalized: "физическо възпитание и спорт" },
-            { original: "Здравословни и безопасни условия на труд", normalized: "здравословни и безопасни условия на труд" },
-            { original: "Предприемачество", normalized: "предприемачество" },
-            { original: "Икономика", normalized: "икономика" },
-            { original: "Рисуване", normalized: "рисуване" },
-            { original: "Перспектива", normalized: "перспектива" },
-            { original: "Цветознание", normalized: "цветознание" },
-            { original: "Композиция", normalized: "композиция" },
-            { original: "Техническо чертане", normalized: "техническо чертане" },
-            { original: "Учебна практика: Моделиране", normalized: "учебна практика: моделиране" },
-            { original: "Учебна практика рисуване и композиция", normalized: "учебна практика рисуване и композиция" },
-            { original: "Производствена практика", normalized: "производствена практика" },
-            { original: "Компютърна графика", normalized: "компютърна графика" },
-            { original: "Дигитален маркетинг", normalized: "дигитален маркетинг" },
-            { original: "Рисуване и композиция", normalized: "рисуване и композиция" },
-            { original: "Моделиране", normalized: "моделиране" },
-            { original: "Въведение в професията", normalized: "въведение в професията" }
-        ],
-        "10.Е - Извършване на термални процедури": [
-            { original: "Български език и литература", normalized: "български език и литература" },
-            { original: "Английски език", normalized: "английски език" },
-            { original: "Руски език", normalized: "руски език" },
-            { original: "Математика", normalized: "математика" },
-            { original: "Информационни технологии", normalized: "информационни технологии" },
-            { original: "История и цивилизации", normalized: "история и цивилизации" },
-            { original: "География и икономика", normalized: "география и икономика" },
-            { original: "Философия", normalized: "философия" },
-            { original: "Биология и здравно образование", normalized: "биология и здравно образование" },
-            { original: "Физика и астрономия", normalized: "физика и астрономия" },
-            { original: "Химия и опазване на околната среда", normalized: "химия и опазване на околната среда" },
-            { original: "Изобразително изкуство", normalized: "изобразително изкуство" },
-            { original: "Физическо възпитание и спорт", normalized: "физическо възпитание и спорт" },
-            { original: "Здравословни и безопасни условия на труд", normalized: "здравословни и безопасни условия на труд" },
-            { original: "Предприемачество", normalized: "предприемачество" },
-            { original: "Икономика", normalized: "икономика" },
-            { original: "Долекарска помощ", normalized: "долекарска помощ" },
-            { original: "Анатомия и физиология", normalized: "анатомия и физиология" },
-            { original: "Ергономия и хигиена на работното място", normalized: "ергономия и хигиена на работното място" },
-            { original: "Моето студио за красота", normalized: "моето студио за красота" },
-            { original: "Латински език", normalized: "латински език" },
-            { original: "Фармакология", normalized: "фармакология" },
-            { original: "Производствена практика", normalized: "производствена практика" },
-            { original: "Долекарска помощ", normalized: "долекарска помощ" },
-            { original: "Ортопедия и травматология", normalized: "ортопедия и травматология" },
-            { original: "Лечебен масаж", normalized: "лечебен масаж" },
-            { original: "Въведение в професията", normalized: "въведение в професията" }
-        ],
-        "10.Д - Икономическо информационно осигуряване": [
-            { original: "Български език и литература", normalized: "български език и литература" },
-            { original: "Английски език", normalized: "английски език" },
-            { original: "Руски език", normalized: "руски език" },
-            { original: "Математика", normalized: "математика" },
-            { original: "Информационни технологии", normalized: "информационни технологии" },
-            { original: "История и цивилизации", normalized: "история и цивилизации" },
-            { original: "География и икономика", normalized: "география и икономика" },
-            { original: "Философия", normalized: "философия" },
-            { original: "Биология и здравно образование", normalized: "биология и здравно образование" },
-            { original: "Физика и астрономия", normalized: "физика и астрономия" },
-            { original: "Химия и опазване на околната среда", normalized: "химия и опазване на околната среда" },
-            { original: "Изобразително изкуство", normalized: "изобразително изкуство" },
-            { original: "Физическо възпитание и спорт", normalized: "физическо възпитание и спорт" },
-            { original: "Здравословни и безопасни условия на труд", normalized: "здравословни и безопасни условия на труд" },
-            { original: "Предприемачество", normalized: "предприемачество" },
-            { original: "Икономика", normalized: "икономика" },
-            { original: "Обща икономическа теория", normalized: "обща икономическа теория" },
-            { original: "Обща теория на счетоводната отчетност", normalized: "обща теория на счетоводната отчетност" },
-            { original: "Учебна практика по Бизнес комуникации", normalized: "учебна практика по бизнес комуникации" },
-            { original: "Учебна практика по Приложни програми с общо предназначение", normalized: "учебна практика по приложни програми с общо предназначение" },
-            { original: "Учебна практика по обща теория на счетоводната отчетност", normalized: "учебна практика по обща теория на счетоводната отчетност" },
-            { original: "Дигитални компетентности в професията", normalized: "дигитални компетентности в професията" },
-            { original: "Дигитален маркетинг", normalized: "дигитален маркетинг" },
-            { original: "Финанси", normalized: "финанси" },
-            { original: "Учебна практика Дигитални компетентности в професията", normalized: "учебна практика дигитални компетентности в професията" },
-            { original: "Учебна практика: Дигитален маркетинг", normalized: "учебна практика: дигитален маркетинг" },
-            { original: "Въведение в професията", normalized: "въведение в професията" }
-        ],
-        "10.З - Козметика": [
-            { original: "Български език и литература", normalized: "български език и литература" },
-            { original: "Английски език", normalized: "английски език" },
-            { original: "Руски език", normalized: "руски език" },
-            { original: "Математика", normalized: "математика" },
-            { original: "Информационни технологии", normalized: "информационни технологии" },
-            { original: "История и цивилизации", normalized: "история и цивилизации" },
-            { original: "География и икономика", normalized: "география и икономика" },
-            { original: "Философия", normalized: "философия" },
-            { original: "Биология и здравно образование", normalized: "биология и здравно образование" },
-            { original: "Физика и астрономия", normalized: "физика и астрономия" },
-            { original: "Химия и опазване на околната среда", normalized: "химия и опазване на околната среда" },
-            { original: "Изобразително изкуство", normalized: "изобразително изкуство" },
-            { original: "Физическо възпитание и спорт", normalized: "физическо възпитание и спорт" },
-            { original: "Здравословни и безопасни условия на труд", normalized: "здравословни и безопасни условия на труд" },
-            { original: "Предприемачество", normalized: "предприемачество" },
-            { original: "Икономика", normalized: "икономика" },
-            { original: "Въведение в професията", normalized: "въведение в професията" },
-            { original: "Хигиена и безопасност при работа", normalized: "хигиена и безопасност при работа" },
-            { original: "Моето студио за красота", normalized: "моето студио за красота" },
-            { original: "Анатомия на човека", normalized: "анатомия на човека" },
-            { original: "Козметика", normalized: "козметика" },
-            { original: "Козметични средства", normalized: "козметични средства" },
-            { original: "Учебна практика Козметика", normalized: "учебна практика козметика" },
-            { original: "Уреди и продукти в професията", normalized: "уреди и продукти в професията" },
-            { original: "Билкови терапии в професията", normalized: "билкови терапии в професията" },
-            { original: "Презентиране", normalized: "презентиране" },
-            { original: "Колористика", normalized: "колористика" },
-            { original: "Учебна практика Билкови терапии в професията", normalized: "учебна практика билкови терапии в професията" },
-            { original: "Учебна практика Колористика", normalized: "учебна практика колористика" },
-            { original: "Учебна практика Уреди и продукти в професията", normalized: "учебна практика уреди и продукти в професията" },
-            { original: "Учебна практика по професията", normalized: "учебна практика по професията" }
-        ]
-    };
+        const SPECIALTIES = {
+            "10.В - Промишлен дизайн": [
+                { original: "Български език и литература", normalized: "български език и литература" },
+                { original: "Английски език", normalized: "английски език" },
+                { original: "Руски език", normalized: "руски език" },
+                { original: "Математика", normalized: "математика" },
+                { original: "Информационни технологии", normalized: "информационни технологии" },
+                { original: "История и цивилизации", normalized: "история и цивилизации" },
+                { original: "География и икономика", normalized: "география и икономика" },
+                { original: "Философия", normalized: "философия" },
+                { original: "Биология и здравно образование", normalized: "биология и здравно образование" },
+                { original: "Физика и астрономия", normalized: "физика и астрономия" },
+                { original: "Химия и опазване на околната среда", normalized: "химия и опазване на околната среда" },
+                { original: "Изобразително изкуство", normalized: "изобразително изкуство" },
+                { original: "Физическо възпитание и спорт", normalized: "физическо възпитание и спорт" },
+                { original: "Здравословни и безопасни условия на труд", normalized: "здравословни и безопасни условия на труд" },
+                { original: "Предприемачество", normalized: "предприемачество" },
+                { original: "Икономика", normalized: "икономика" },
+                { original: "Рисуване", normalized: "рисуване" },
+                { original: "Перспектива", normalized: "перспектива" },
+                { original: "Цветознание", normalized: "цветознание" },
+                { original: "Композиция", normalized: "композиция" },
+                { original: "Техническо чертане", normalized: "техническо чертане" },
+                { original: "Учебна практика: Моделиране", normalized: "учебна практика: моделиране" },
+                { original: "Учебна практика рисуване и композиция", normalized: "учебна практика рисуване и композиция" },
+                { original: "Производствена практика", normalized: "производствена практика" },
+                { original: "Компютърна графика", normalized: "компютърна графика" },
+                { original: "Дигитален маркетинг", normalized: "дигитален маркетинг" },
+                { original: "Рисуване и композиция", normalized: "рисуване и композиция" },
+                { original: "Моделиране", normalized: "моделиране" },
+                { original: "Въведение в професията", normalized: "въведение в професията" }
+            ],
+            "10.Е - Извършване на термални процедури": [
+                { original: "Български език и литература", normalized: "български език и литература" },
+                { original: "Английски език", normalized: "английски език" },
+                { original: "Руски език", normalized: "руски език" },
+                { original: "Математика", normalized: "математика" },
+                { original: "Информационни технологии", normalized: "информационни технологии" },
+                { original: "История и цивилизации", normalized: "история и цивилизации" },
+                { original: "География и икономика", normalized: "география и икономика" },
+                { original: "Философия", normalized: "философия" },
+                { original: "Биология и здравно образование", normalized: "биология и здравно образование" },
+                { original: "Физика и астрономия", normalized: "физика и астрономия" },
+                { original: "Химия и опазване на околната среда", normalized: "химия и опазване на околната среда" },
+                { original: "Изобразително изкуство", normalized: "изобразително изкуство" },
+                { original: "Физическо възпитание и спорт", normalized: "физическо възпитание и спорт" },
+                { original: "Здравословни и безопасни условия на труд", normalized: "здравословни и безопасни условия на труд" },
+                { original: "Предприемачество", normalized: "предприемачество" },
+                { original: "Икономика", normalized: "икономика" },
+                { original: "Долекарска помощ", normalized: "долекарска помощ" },
+                { original: "Анатомия и физиология", normalized: "анатомия и физиология" },
+                { original: "Ергономия и хигиена на работното място", normalized: "ергономия и хигиена на работното място" },
+                { original: "Моето студио за красота", normalized: "моето студио за красота" },
+                { original: "Латински език", normalized: "латински език" },
+                { original: "Фармакология", normalized: "фармакология" },
+                { original: "Производствена практика", normalized: "производствена практика" },
+                { original: "Долекарска помощ", normalized: "долекарска помощ" }, // Дублиране на предмет в списъка
+                { original: "Ортопедия и травматология", normalized: "ортопедия и травматология" },
+                { original: "Лечебен масаж", normalized: "лечебен масаж" },
+                { original: "Въведение в професията", normalized: "въведение в професията" }
+            ]
+        };
 
         function normalizeSubjectName(subjectName) {
             // Премахваме " / ООП", " / ОбПП", " / ОтПП", " / СПП", " / РПП", " / ДП/ДрУП" и излишни интервали
@@ -364,6 +342,9 @@
                     classSelect.disabled = true;
                     gradesContainer.innerHTML = "";
                     successDiv.textContent = "";
+                    finalGradesDisplayDiv.innerHTML = ""; // Изчистваме и окончателните оценки
+                    currentStudentName = null; // Изчистваме текущия ученик
+                    exportAllStudentsButton.disabled = true; // Деактивираме бутона за експорт на всички
 
                 } catch (error) {
                     console.error("Грешка при обработка на файла:", error);
@@ -477,11 +458,9 @@
             classSelect.disabled = true;
             gradesContainer.innerHTML = "";
             successDiv.textContent = "";
-
-            let finalGradesDiv = document.getElementById('finalGradesDisplay');
-            if (finalGradesDiv) {
-                finalGradesDiv.remove();
-            }
+            finalGradesDisplayDiv.innerHTML = ""; // Изчистваме и окончателните оценки
+            currentStudentName = null; // Изчистваме текущия ученик
+            exportAllStudentsButton.disabled = true; // Деактивираме бутона за експорт на всички
 
             if (!selectedSpecialty) {
                 return;
@@ -505,20 +484,20 @@
             });
             // Активираме studentSelect само ако има заредени данни и избрана специалност
             studentSelect.disabled = Object.keys(data).length === 0 || specialtySelect.value === "";
+            // Активираме бутона за експорт на всички, ако има избрана специалност и заредени данни
+            exportAllStudentsButton.disabled = specialtySelect.value === "" || Object.keys(data).length === 0;
         }
 
         function onStudentChange() {
             const student = studentSelect.value;
             gradesContainer.innerHTML = "";
             successDiv.textContent = "";
+            finalGradesDisplayDiv.innerHTML = ""; // Изчистваме окончателните оценки при смяна на ученик
+            currentStudentName = student; // Записваме текущия ученик
 
             if (!student) {
                 classSelect.innerHTML = '<option value="">-- първо избери ученик --</option>';
                 classSelect.disabled = true;
-                let finalGradesDiv = document.getElementById('finalGradesDisplay');
-                if (finalGradesDiv) {
-                    finalGradesDiv.remove();
-                }
                 return;
             }
 
@@ -612,11 +591,12 @@
         // Нова функция, която обединява изчисляването и показването на окончателните оценки
         function calculateAndDisplayFinalGrades(studentName) {
             // Преизчисляваме finalGrades на базата на избраната специалност
-            calculateFinalGrades(studentName);
+            calculateFinalGradesForStudent(studentName); // Използваме нова функция, която работи за конкретен ученик
             displayFinalGrades(studentName);
         }
 
-        function calculateFinalGrades(studentName) {
+        // Преименувана функция за избягване на конфликти и яснота
+        function calculateFinalGradesForStudent(studentName) {
             const studentData = data[studentName];
             if (!studentData) return;
 
@@ -652,7 +632,8 @@
 
                 if (grades.length > 0) {
                     const sum = grades.reduce((acc, grade) => acc + grade, 0);
-                    const average = Math.round(sum / grades.length); // Закръгляме до най-близкото цяло число
+                    // Запазваме като число с две десетични знака
+                    const average = parseFloat((sum / grades.length).toFixed(2));
                     studentData.finalGrades[normalizedSubject] = {
                         grade: average,
                         gradesByClass: subjectEntry.grades,
@@ -672,16 +653,8 @@
         function displayFinalGrades(studentName) {
             const finalGradesData = data[studentName]?.finalGrades;
 
-            let finalGradesDiv = document.getElementById('finalGradesDisplay');
-            if (!finalGradesDiv) {
-                finalGradesDiv = document.createElement('div');
-                finalGradesDiv.id = 'finalGradesDisplay';
-                // Добавяме го след successDiv, за да е под всички останали контроли
-                successDiv.parentNode.insertBefore(finalGradesDiv, successDiv.nextSibling);
-            }
-
             if (!finalGradesData || Object.keys(finalGradesData).length === 0 || currentSpecialtySubjects.length === 0) {
-                finalGradesDiv.innerHTML = ""; // Изчистваме, ако няма данни или избрана специалност
+                finalGradesDisplayDiv.innerHTML = ""; // Изчистваме, ако няма данни или избрана специалност
                 return;
             }
 
@@ -712,8 +685,10 @@
                 const grade9 = item?.gradesByClass?.["9 клас"] !== null ? item.gradesByClass["9 клас"] : '-';
                 const grade10 = item?.gradesByClass?.["10 клас"] !== null ? item.gradesByClass["10 клас"] : '-';
 
-                const finalGradeDisplay = item?.grade !== null ? item.grade : '-';
-                const finalGradeClass = item?.grade !== null ? `grade-cell grade-${item.grade}` : 'no-grade';
+                // Форматираме окончателната оценка с две десетични знака
+                const finalGradeDisplay = item?.grade !== null ? item.grade.toFixed(2) : '-';
+                // За визуално оцветяване, ползваме закръглена стойност
+                const finalGradeClass = item?.grade !== null ? `grade-cell grade-${Math.round(item.grade)}` : 'no-grade'; 
 
                 finalGradesHtml += `
                     <tr>
@@ -733,18 +708,144 @@
             finalGradesHtml += '</tbody></table>';
 
             if (overallCount > 0) {
-                const overallAverage = Math.round(overallSum / overallCount); // Закръгляме до цяло число
+                // Форматираме общия среден успех с две десетични знака
+                const overallAverage = (overallSum / overallCount).toFixed(2); 
                 finalGradesHtml += `<p style="margin-top: 15px; font-weight: bold; padding: 10px; background-color: #e0f7fa; color: #00796b; border-radius: 4px;">
-                                             Общ среден успех от окончателните оценки: ${overallAverage}
-                                         </p>`;
+                                            Общ среден успех от окончателните оценки: ${overallAverage}
+                                        </p>`;
             } else {
                 finalGradesHtml += `<p style="margin-top: 15px; font-weight: bold; padding: 10px; background-color: #ffe0b2; color: #e65100; border-radius: 4px;">
-                                             Няма достатъчно оценки за изчисляване на общ среден успех по избраната специалност.
-                                         </p>`;
+                                            Няма достатъчно оценки за изчисляване на общ среден успех по избраната специалност.
+                                        </p>`;
             }
 
-            finalGradesDiv.innerHTML = finalGradesHtml;
+            // Добавяме бутона за експорт на текущия ученик
+            finalGradesHtml += `<button id="exportSelectedStudentButton">Експорт на избрания ученик в Excel</button>`;
+
+            finalGradesDisplayDiv.innerHTML = finalGradesHtml;
+
+            // Прикачваме event listener към бутона след като е създаден
+            document.getElementById('exportSelectedStudentButton').addEventListener('click', exportSelectedStudentFinalGradesToExcel);
         }
+
+        function exportSelectedStudentFinalGradesToExcel() {
+            if (!currentStudentName || !data[currentStudentName] || !data[currentStudentName].finalGrades) {
+                alert("Няма избрани окончателни оценки за експорт.");
+                return;
+            }
+
+            const finalGradesData = data[currentStudentName].finalGrades;
+            const exportData = [];
+
+            // Добавяме хедъри за таблицата
+            exportData.push(["Предмет", "Годишен успех (VIII клас)", "Годишен успех (IX клас)", "Годишен успех (X клас)", "Окончателна оценка"]);
+
+            // Попълваме данните, като използваме същия ред като в таблицата
+            currentSpecialtySubjects.forEach(reqSubject => {
+                const item = finalGradesData[reqSubject.normalized];
+                const grade8 = item?.gradesByClass?.["8 клас"] !== null ? item.gradesByClass["8 клас"] : '-';
+                const grade9 = item?.gradesByClass?.["9 клас"] !== null ? item.gradesByClass["9 клас"] : '-';
+                const grade10 = item?.gradesByClass?.["10 клас"] !== null ? item.gradesByClass["10 клас"] : '-';
+                const finalGrade = item?.grade !== null ? item.grade.toFixed(2) : '-'; // Форматираме с две десетични знака за експорт
+
+                exportData.push([reqSubject.original, grade8, grade9, grade10, finalGrade]);
+            });
+
+            // Изчисляваме общия среден успех
+            let overallSum = 0;
+            let overallCount = 0;
+            currentSpecialtySubjects.forEach(reqSubject => {
+                const item = finalGradesData[reqSubject.normalized];
+                if (item?.grade !== null) {
+                    overallSum += item.grade;
+                    overallCount++;
+                }
+            });
+
+            if (overallCount > 0) {
+                const overallAverage = (overallSum / overallCount).toFixed(2);
+                exportData.push([]); // Празен ред за разделител
+                exportData.push(["Общ среден успех", "", "", "", overallAverage]);
+            }
+
+            const ws = XLSX.utils.aoa_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Окончателни оценки");
+
+            // Премахваме невалидни символи за име на файл
+            const safeStudentName = currentStudentName.replace(/[^a-z0-9_\-.]/gi, '_');
+            const fileName = `Окончателни_оценки_${safeStudentName}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+
+            alert(`Окончателните оценки за ${currentStudentName} са експортирани успешно в "${fileName}"!`);
+        }
+
+        function exportAllFinalGradesToExcel() {
+            if (!specialtySelect.value || Object.keys(data).length === 0 || currentSpecialtySubjects.length === 0) {
+                alert("Моля, изберете специалност и заредете файл преди да експортирате всички оценки.");
+                return;
+            }
+
+            const wb = XLSX.utils.book_new();
+            let studentsProcessed = 0;
+
+            Object.keys(data).forEach(studentName => {
+                calculateFinalGradesForStudent(studentName); // Изчисляваме окончателните оценки за всеки ученик
+                const finalGradesData = data[studentName].finalGrades;
+
+                if (finalGradesData && Object.keys(finalGradesData).length > 0) {
+                    const exportData = [];
+                    // Добавяме хедъри за таблицата
+                    exportData.push(["Предмет", "Годишен успех (VIII клас)", "Годишен успех (IX клас)", "Годишен успех (X клас)", "Окончателна оценка"]);
+
+                    // Попълваме данните, като използваме същия ред като в таблицата
+                    currentSpecialtySubjects.forEach(reqSubject => {
+                        const item = finalGradesData[reqSubject.normalized];
+                        const grade8 = item?.gradesByClass?.["8 клас"] !== null ? item.gradesByClass["8 клас"] : '-';
+                        const grade9 = item?.gradesByClass?.["9 клас"] !== null ? item.gradesByClass["9 клас"] : '-';
+                        const grade10 = item?.gradesByClass?.["10 клас"] !== null ? item.gradesByClass["10 клас"] : '-';
+                        const finalGrade = item?.grade !== null ? item.grade.toFixed(2) : '-'; // Форматираме с две десетични знака
+
+                        exportData.push([reqSubject.original, grade8, grade9, grade10, finalGrade]);
+                    });
+
+                    // Изчисляваме общия среден успех за листа
+                    let overallSum = 0;
+                    let overallCount = 0;
+                    currentSpecialtySubjects.forEach(reqSubject => {
+                        const item = finalGradesData[reqSubject.normalized];
+                        if (item?.grade !== null) {
+                            overallSum += item.grade;
+                            overallCount++;
+                        }
+                    });
+
+                    if (overallCount > 0) {
+                        const overallAverage = (overallSum / overallCount).toFixed(2);
+                        exportData.push([]); // Празен ред за разделител
+                        exportData.push(["Общ среден успех", "", "", "", overallAverage]);
+                    }
+
+                    const ws = XLSX.utils.aoa_to_sheet(exportData);
+                    // Името на листа трябва да е до 31 символа и без някои специални символи
+                    const sheetName = studentName.substring(0, 31).replace(/[\[\]\*\\\/\?\:]/g, '_');
+                    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+                    studentsProcessed++;
+                }
+            });
+
+            if (studentsProcessed === 0) {
+                alert("Няма налични окончателни оценки за експорт за нито един ученик по избраната специалност.");
+                return;
+            }
+
+            const specialtyNameForFile = specialtySelect.value.replace(/[^a-z0-9_\-.]/gi, '_');
+            const fileName = `Окончателни_оценки_всички_ученици_${specialtyNameForFile}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+
+            alert(`Окончателните оценки за всички ${studentsProcessed} ученици по специалност "${specialtySelect.value}" са експортирани успешно в "${fileName}"!`);
+        }
+
     </script>
 </body>
 
