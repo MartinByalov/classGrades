@@ -262,9 +262,38 @@
                 { original: "Латински език", normalized: "латински език" },
                 { original: "Фармакология", normalized: "фармакология" },
                 { original: "Производствена практика", normalized: "производствена практика" },
-                { original: "Долекарска помощ", normalized: "долекарска помощ" }, // Дублиране на предмет в списъка
+                { original: "Долекарска помощ", normalized: "долекарска помощ" },
                 { original: "Ортопедия и травматология", normalized: "ортопедия и травматология" },
                 { original: "Лечебен масаж", normalized: "лечебен масаж" },
+                { original: "Въведение в професията", normalized: "въведение в професията" }
+            ],
+            "10.Д - Икономическо информационно осигуряване": [
+                { original: "Български език и литература", normalized: "български език и литература" },
+                { original: "Английски език", normalized: "английски език" },
+                { original: "Руски език", normalized: "руски език" },
+                { original: "Математика", normalized: "математика" },
+                { original: "Информационни технологии", normalized: "информационни технологии" },
+                { original: "История и цивилизации", normalized: "история и цивилизации" },
+                { original: "География и икономика", normalized: "география и икономика" },
+                { original: "Философия", normalized: "философия" },
+                { original: "Биология и здравно образование", normalized: "биология и здравно образование" },
+                { original: "Физика и астрономия", normalized: "физика и астрономия" },
+                { original: "Химия и опазване на околната среда", normalized: "химия и опазване на околната среда" },
+                { original: "Изобразително изкуство", normalized: "изобразително изкуство" },
+                { original: "Физическо възпитание и спорт", normalized: "физическо възпитание и спорт" },
+                { original: "Здравословни и безопасни условия на труд", normalized: "здравословни и безопасни условия на труд" },
+                { original: "Предприемачество", normalized: "предприемачество" },
+                { original: "Икономика", normalized: "икономика" },
+                { original: "Обща икономическа теория", normalized: "обща икономическа теория" },
+                { original: "Обща теория на счетоводната отчетност", normalized: "обща теория на счетоводната отчетност" },
+                { original: "Учебна практика по Бизнес комуникации", normalized: "учебна практика по бизнес комуникации" },
+                { original: "Учебна практика по Приложни програми с общо предназначение", normalized: "учебна практика по приложни програми с общо предназначение" },
+                { original: "Учебна практика по обща теория на счетоводната отчетност", normalized: "учебна практика по обща теория на счетоводната отчетност" },
+                { original: "Дигитални компетентности в професията", normalized: "дигитални компетентности в професията" },
+                { original: "Дигитален маркетинг", normalized: "дигитален маркетинг" },
+                { original: "Финанси", normalized: "финанси" },
+                { original: "Учебна практика Дигитални компетентности в професията", normalized: "учебна практика дигитални компетентности в професията" },
+                { original: "Учебна практика: Дигитален маркетинг", normalized: "учебна практика: дигитален маркетинг" },
                 { original: "Въведение в професията", normalized: "въведение в професията" }
             ]
         };
@@ -407,7 +436,7 @@
         function onSpecialtyChange() {
             const selectedSpecialty = specialtySelect.value;
             currentSpecialtySubjects = [];
-            
+
             // Изчистваме селекторите за ученик и клас, и таблиците
             studentSelect.innerHTML = '<option value="">-- първо зареди файл и избери специалност --</option>';
             studentSelect.disabled = true;
@@ -673,17 +702,16 @@
             if (overallCount > 0) {
                 const overallAverage = Math.round(overallSum / overallCount); // Закръгляме до цяло число
                 finalGradesHtml += `<p style="margin-top: 15px; font-weight: bold; padding: 10px; background-color: #e0f7fa; color: #00796b; border-radius: 4px;">
-                                      Общ среден успех от окончателните оценки: ${overallAverage}
-                                    </p>`;
+                                             Общ среден успех от окончателните оценки: ${overallAverage}
+                                         </p>`;
             } else {
                 finalGradesHtml += `<p style="margin-top: 15px; font-weight: bold; padding: 10px; background-color: #ffe0b2; color: #e65100; border-radius: 4px;">
-                                      Няма достатъчно оценки за изчисляване на общ среден успех по избраната специалност.
-                                    </p>`;
+                                             Няма достатъчно оценки за изчисляване на общ среден успех по избраната специалност.
+                                         </p>`;
             }
 
             finalGradesDiv.innerHTML = finalGradesHtml;
         }
-
     </script>
 </body>
 
