@@ -361,6 +361,7 @@
             { original: "Козметика", normalized: "козметика" },
             { original: "Козметични средства", normalized: "козметични средства" },
             { original: "Учебна практика Козметика", normalized: "учебна практика козметика" },
+            { original: "Производствена практика", normalized: "производствена практика" },
             { original: "Уреди и продукти в професията", normalized: "уреди и продукти в професията" },
             { original: "Билкови терапии в професията", normalized: "билкови терапии в професията" },
             { original: "Презентиране", normalized: "презентиране" },
@@ -906,7 +907,7 @@
             const fileName = `Окончателни_оценки_всички_ученици_${specialtyNameForFile}.xlsx`;
             XLSX.writeFile(wb, fileName);
 
-            alert(`Окончателните оценки за всички ${studentsProcessed} ученици по специалност "${specialtySelect.value}" са експортирани успешно в "${fileName}"!`);
+            alert(`Окончателните оценки за всички (${studentsProcessed - 1}) ученици по специалност "${specialtySelect.value}" са експортирани успешно в "${fileName}"!`);
         }
 
     </script>
